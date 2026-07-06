@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>ASCII Halftone Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+
+<style>
+  body {
+    margin: 0;
+    padding: 20px;
+    background: #111;
+    color: white;
+    font-family: Arial, sans-serif;
+  }
+
+  .tool-wrapper {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  #panel {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .preview {
+    flex: 1;
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  .imageBox {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .imageBox img {
+    display: none;
+    max-width: 220px;
+    max-height: 220px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border: 1px solid #444;
+    background: white;
+  }
+
+  .canvasSection {
+    flex: 1;
+    min-width: 0;
+  }
+
+  #canvasContainer canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
+
+  canvas {
+    border: 1px solid #444;
+    display: block;
+  }
+
+  label {
+    font-size: 13px;
+  }
+
+  input, button, textarea, select {
+    width: 100%;
+  }
+
+  textarea {
+    height: 60px;
+  }
+
+  button {
+    padding: 10px;
+    background: white;
+    border: none;
+    cursor: pointer;
+  }
+
+  h2 {
+    margin-top: 0;
+  }
+
+  h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.8;
+  }
+
+  @media (max-width: 900px) {
+    body {
+      padding: 14px;
+    }
+
+    .tool-wrapper {
+      flex-direction: column;
+    }
+
+    #panel {
+      width: 100%;
+    }
+
+    .preview {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .imageBox img {
+      max-width: 160px;
+      max-height: 160px;
+    }
+
+    .canvasSection {
+      width: 100%;
+    }
+
+    #canvasContainer canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="tool-wrapper">
+
+  <div id="panel">
+    <h2>ASCII Halftone</h2>
+
+    <input type="file" id="upload" accept="image/*">
+
+    <label>Cell Size</label>
+    <input type="range" id="cell" min="3" max="24" value="6">
+
+    <label>Contrast</label>
+    <input type="range" id="contrast" min="0.5" max="5" step="0.1" value="2.4">
+
+    <label>Threshold</label>
+    <input type="range" id="threshold" min="0" max="255" value="190">
+
+    <label>Pattern Mode</label>
+    <select id="mode">
+      <option value="ascii">ASCII Text</option>
+      <option value="glyph">Glyph Pattern</option>
+      <option value="mixed" selected>Mixed</option>
+    </select>
+
+    <label>Glyph Color</label>
+    <input type="color" id="glyphColor" value="#168ee5">
+
+    <label>Background Color</label>
+    <input type="color" id="bgColor" value="#ffffff">
+
+    <label>Pattern Characters</label>
+    <textarea id="chars"> .,:;+=xX#%@</textarea>
+
+    <button onclick="redraw()">Generate</button>
+    <button onclick="saveCanvas('ascii-halftone','png')">Save PNG</button>
+  </div>
+
+  <div class="preview">
+
+    <div class="imageBox">
+      <h3>Original Image</h3>
+      <img id="previewImage" src="" alt="Preview">
+    </div>
+
+    <div class="canvasSection">
+      <h3>Generated Pattern</h3>
+      <div id="canvasContainer"></div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+let img;
+let outputW = 900;
+let outputH = 900;
+let maxOutputSize = 900;
+
+function setup() {
+  let c = createCanvas(outputW, outputH);
+  c.parent("canvasContainer");
+
+  pixelDensity(2);
+  noLoop();
+
+  document.getElementById("upload").addEventListener("change", handleFile);
+
+  [
+    "cell",
+    "contrast",
+    "threshold",
+    "mode",
+    "glyphColor",
+    "bgColor",
+    "chars"
+  ].forEach(id => {
+    document.getElementById(id).addEventListener("input", redraw);
+  });
+}
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+
+  const preview = document.getElementById("previewImage");
+  preview.src = url;
+
+  preview.onload = () => {
+    preview.style.display = "block";
+  };
+
+  loadImage(url, loaded => {
+    const scale = maxOutputSize / max(loaded.width, loaded.height);
+
+    outputW = floor(loaded.width * scale);
+    outputH = floor(loaded.height * scale);
+
+    resizeCanvas(outputW, outputH);
+
+    img = loaded;
+    img.resize(outputW, outputH);
+
+    redraw();
+  });
+}
+
+function draw() {
+  const glyphColor = document.getElementById("glyphColor").value;
+  const bgColor = document.getElementById("bgColor").value;
+
+  background(bgColor);
+
+  if (!img) {
+    fill(glyphColor);
+    noStroke();
+    textSize(24);
+    textAlign(CENTER, CENTER);
+    text("Upload an image", width / 2, height / 2);
+    return;
+  }
+
+  img.loadPixels();
+
+  let cell = Number(document.getElementById("cell").value);
+  let contrast = Number(document.getElementById("contrast").value);
+  let threshold = Number(document.getElementById("threshold").value);
+  let chars = document.getElementById("chars").value;
+  let mode = document.getElementById("mode").value;
+
+  textAlign(CENTER, CENTER);
+  textFont("monospace");
+  textSize(cell * 1.15);
+
+  for (let y = 0; y < height; y += cell) {
+    for (let x = 0; x < width; x += cell) {
+
+      let b = getBrightness(x, y);
+
+      b = 128 + (b - 128) * contrast;
+      b = constrain(b, 0, 255);
+
+      let darkness = map(b, 255, 0, 0, 1);
+
+      if (b < threshold) {
+        let jitterX = random(-cell * 0.15, cell * 0.15);
+        let jitterY = random(-cell * 0.15, cell * 0.15);
+
+        push();
+        translate(x + cell / 2 + jitterX, y + cell / 2 + jitterY);
+
+        if ((x / cell + y / cell) % 2 === 0) {
+          rotate(0);
+        } else {
+          rotate(HALF_PI);
+        }
+
+        if (mode === "ascii") {
+          drawASCII(darkness, chars, glyphColor);
+        } else if (mode === "glyph") {
+          drawGlyph(0, 0, darkness, cell, glyphColor);
+        } else {
+          if (random() < 0.55) {
+            drawASCII(darkness, chars, glyphColor);
+          } else {
+            drawGlyph(0, 0, darkness, cell, glyphColor);
+          }
+        }
+
+        pop();
+      }
+    }
+  }
+
+  addGrain(glyphColor);
+}
+
+function drawASCII(darkness, chars, glyphColor) {
+  let index = floor(map(darkness, 0, 1, 0, chars.length - 1));
+  index = constrain(index, 0, chars.length - 1);
+
+  fill(glyphColor);
+  noStroke();
+  text(chars[index], 0, 0);
+}
+
+function drawGlyph(x, y, darkness, cell, glyphColor) {
+  stroke(glyphColor);
+  fill(glyphColor);
+  strokeWeight(1);
+
+  let s = cell * map(darkness, 0, 1, 0.25, 1.1);
+
+  if (darkness < 0.25) {
+    point(x, y);
+  } else if (darkness < 0.45) {
+    line(x - s / 2, y, x + s / 2, y);
+  } else if (darkness < 0.65) {
+    line(x - s / 2, y - s / 2, x + s / 2, y + s / 2);
+    line(x + s / 2, y - s / 2, x - s / 2, y + s / 2);
+  } else if (darkness < 0.85) {
+    noFill();
+    rectMode(CENTER);
+    rect(x, y, s, s);
+  } else {
+    ellipse(x, y, s, s);
+  }
+}
+
+function addGrain(glyphColor) {
+  stroke(glyphColor);
+  strokeWeight(0.6);
+
+  for (let i = 0; i < 3000; i++) {
+    if (random() < 0.35) {
+      point(random(width), random(height));
+    }
+  }
+}
+
+function getBrightness(x, y) {
+  x = constrain(floor(x), 0, img.width - 1);
+  y = constrain(floor(y), 0, img.height - 1);
+
+  let i = 4 * (y * img.width + x);
+
+  let r = img.pixels[i];
+  let g = img.pixels[i + 1];
+  let b = img.pixels[i + 2];
+
+  return (r + g + b) / 3;
+}
+</script>
+
+</body>
+</html>
