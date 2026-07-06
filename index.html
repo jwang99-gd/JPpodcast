@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>Image Pattern Tools</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #050505;
+  color: #f5f5f5;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 28px;
+  border-right: 1px solid #222;
+  background: #0b0b0b;
+}
+
+.main {
+  padding: 28px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.subtitle {
+  color: #999;
+  margin-bottom: 28px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.tab {
+  flex: 1;
+  padding: 12px;
+  background: #171717;
+  color: #aaa;
+  border: 1px solid #333;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #fff;
+  color: #000;
+}
+
+.tool {
+  display: none;
+}
+
+.tool.active {
+  display: block;
+}
+
+label {
+  display: block;
+  margin-top: 16px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ccc;
+}
+
+input,
+select,
+textarea,
+button {
+  width: 100%;
+  background: #111;
+  color: white;
+  border: 1px solid #333;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+textarea {
+  height: 70px;
+  resize: vertical;
+}
+
+input[type="color"] {
+  height: 42px;
+  padding: 4px;
+}
+
+button {
+  margin-top: 14px;
+  background: #fff;
+  color: #000;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #111;
+  color: #fff;
+}
+
+.output-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.section-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  margin-bottom: 10px;
+}
+
+.preview-img {
+  display: none;
+  max-width: 220px;
+  max-height: 220px;
+  border: 1px solid #333;
+  background: white;
+}
+
+.canvas-wrap canvas {
+  max-width: 100%;
+  height: auto !important;
+  border: 1px solid #333;
+  background: white;
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid #222;
+  }
+
+  .output-layout {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <h1>Image Pattern Tools</h1>
+    <div class="subtitle">Upload image → generate visual pattern</div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTool('ascii')">ASCII</button>
+      <button class="tab" onclick="switchTool('magnetic')">Magnetic</button>
+    </div>
+
+    <!-- ASCII CONTROLS -->
+    <div id="asciiControls" class="tool active">
+      <label>Upload Image</label>
+      <input type="file" id="asciiUpload" accept="image/*">
+
+      <label>Cell Size</label>
+      <input type="range" id="asciiCell" min="3" max="24" value="6">
+
+      <label>Contrast</label>
+      <input type="range" id="asciiContrast" min="0.5" max="5" step="0.1" value="2.4">
+
+      <label>Threshold</label>
+      <input type="range" id="asciiThreshold" min="0" max="255" value="190">
+
+      <label>Pattern Mode</label>
+      <select id="asciiMode">
+        <option value="ascii">ASCII Text</option>
+        <option value="glyph">Glyph Pattern</option>
+        <option value="mixed" selected>Mixed</option>
+      </select>
+
+      <label>Glyph Color</label>
+      <input type="color" id="asciiGlyphColor" value="#168ee5">
+
+      <label>Background Color</label>
+      <input type="color" id="asciiBgColor" value="#ffffff">
+
+      <label>Pattern Characters</label>
+      <textarea id="asciiChars"> .,:;+=xX#%@</textarea>
+
+      <button onclick="asciiSketch.redraw()">Generate</button>
+      <button class="secondary" onclick="asciiSketch.saveCanvas('ascii-halftone','png')">Save PNG</button>
+    </div>
+
+    <!-- MAGNETIC CONTROLS -->
+    <div id="magneticControls" class="tool">
+      <label>Upload Image</label>
+      <input type="file" id="magUpload" accept="image/*">
+
+      <label>Threshold</label>
+      <input type="range" id="magThreshold" min="0" max="255" value="120">
+
+      <label>Stroke Density</label>
+      <input type="range" id="magDensity" min="2" max="20" value="7">
+
+      <label>Line Length</label>
+      <input type="range" id="magLength" min="5" max="80" value="35">
+
+      <label>Noise Distortion</label>
+      <input type="range" id="magNoise" min="0" max="2" step="0.01" value="0.65">
+
+      <label>Explosion Strength</label>
+      <input type="range" id="magForce" min="0" max="3" step="0.01" value="1.4">
+
+      <label>Stroke Weight</label>
+      <input type="range" id="magStrokeWeight" min="0.3" max="8" step="0.1" value="2.2">
+
+      <label>Stroke Color</label>
+      <input type="color" id="magStrokeColor" value="#000000">
+
+      <label>Background Color</label>
+      <input type="color" id="magBgColor" value="#ffffff">
+
+      <button onclick="magSketch.redraw()">Generate</button>
+      <button class="secondary" onclick="magSketch.saveCanvas('magnetic-pattern','png')">Save PNG</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ASCII OUTPUT -->
+    <div id="asciiOutput" class="tool active">
+      <div class="output-layout">
+        <div>
+          <div class="section-title">Original Image</div>
+          <img id="asciiPreview" class="preview-img">
+        </div>
+        <div>
+          <div class="section-title">Generated Pattern</div>
+          <div id="asciiCanvas" class="canvas-wrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAGNETIC OUTPUT -->
+    <div id="magneticOutput" class="tool">
+      <div class="output-layout">
+        <div>
+          <div class="section-title">Original Image</div>
+          <img id="magPreview" class="preview-img">
+        </div>
+        <div>
+          <div class="section-title">Generated Pattern</div>
+          <div id="magCanvas" class="canvas-wrap"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+function switchTool(tool) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tool").forEach(t => t.classList.remove("active"));
+
+  if (tool === "ascii") {
+    document.querySelectorAll(".tab")[0].classList.add("active");
+    asciiControls.classList.add("active");
+    asciiOutput.classList.add("active");
+  } else {
+    document.querySelectorAll(".tab")[1].classList.add("active");
+    magneticControls.classList.add("active");
+    magneticOutput.classList.add("active");
+  }
+}
+
+/* ASCII TOOL */
+let asciiSketch = new p5(p => {
+  let img;
+  let maxSize = 900;
+
+  p.setup = () => {
+    let c = p.createCanvas(900, 900);
+    c.parent("asciiCanvas");
+    p.pixelDensity(2);
+    p.noLoop();
+
+    asciiUpload.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      asciiPreview.src = url;
+      asciiPreview.style.display = "block";
+
+      p.loadImage(url, loaded => {
+        const scale = maxSize / Math.max(loaded.width, loaded.height);
+        p.resizeCanvas(Math.floor(loaded.width * scale), Math.floor(loaded.height * scale));
+        img = loaded;
+        img.resize(p.width, p.height);
+        p.redraw();
+      });
+    });
+
+    [
+      asciiCell, asciiContrast, asciiThreshold,
+      asciiMode, asciiGlyphColor, asciiBgColor, asciiChars
+    ].forEach(el => el.addEventListener("input", () => p.redraw()));
+  };
+
+  p.draw = () => {
+    const glyphColor = asciiGlyphColor.value;
+    p.background(asciiBgColor.value);
+
+    if (!img) {
+      p.fill(glyphColor);
+      p.noStroke();
+      p.textAlign(p.CENTER, p.CENTER);
+      p.textSize(24);
+      p.text("Upload an image", p.width / 2, p.height / 2);
+      return;
+    }
+
+    img.loadPixels();
+
+    let cell = Number(asciiCell.value);
+    let contrast = Number(asciiContrast.value);
+    let threshold = Number(asciiThreshold.value);
+    let chars = asciiChars.value;
+    let mode = asciiMode.value;
+
+    p.textAlign(p.CENTER, p.CENTER);
+    p.textFont("monospace");
+    p.textSize(cell * 1.15);
+
+    for (let y = 0; y < p.height; y += cell) {
+      for (let x = 0; x < p.width; x += cell) {
+        let b = brightnessAt(x, y);
+        b = 128 + (b - 128) * contrast;
+        b = p.constrain(b, 0, 255);
+
+        let darkness = p.map(b, 255, 0, 0, 1);
+
+        if (b < threshold) {
+          p.push();
+          p.translate(
+            x + cell / 2 + p.random(-cell * 0.15, cell * 0.15),
+            y + cell / 2 + p.random(-cell * 0.15, cell * 0.15)
+          );
+
+          if ((x / cell + y / cell) % 2 !== 0) p.rotate(p.HALF_PI);
+
+          if (mode === "ascii") drawASCII(darkness, chars, glyphColor);
+          else if (mode === "glyph") drawGlyph(darkness, cell, glyphColor);
+          else p.random() < 0.55 ? drawASCII(darkness, chars, glyphColor) : drawGlyph(darkness, cell, glyphColor);
+
+          p.pop();
+        }
+      }
+    }
+
+    p.stroke(glyphColor);
+    p.strokeWeight(0.6);
+    for (let i = 0; i < 3000; i++) {
+      if (p.random() < 0.35) p.point(p.random(p.width), p.random(p.height));
+    }
+  };
+
+  function drawASCII(darkness, chars, color) {
+    let index = Math.floor(p.map(darkness, 0, 1, 0, chars.length - 1));
+    index = p.constrain(index, 0, chars.length - 1);
+    p.fill(color);
+    p.noStroke();
+    p.text(chars[index], 0, 0);
+  }
+
+  function drawGlyph(darkness, cell, color) {
+    p.stroke(color);
+    p.fill(color);
+    p.strokeWeight(1);
+
+    let s = cell * p.map(darkness, 0, 1, 0.25, 1.1);
+
+    if (darkness < 0.25) p.point(0, 0);
+    else if (darkness < 0.45) p.line(-s / 2, 0, s / 2, 0);
+    else if (darkness < 0.65) {
+      p.line(-s / 2, -s / 2, s / 2, s / 2);
+      p.line(s / 2, -s / 2, -s / 2, s / 2);
+    } else if (darkness < 0.85) {
+      p.noFill();
+      p.rectMode(p.CENTER);
+      p.rect(0, 0, s, s);
+    } else {
+      p.ellipse(0, 0, s, s);
+    }
+  }
+
+  function brightnessAt(x, y) {
+    x = p.constrain(Math.floor(x), 0, img.width - 1);
+    y = p.constrain(Math.floor(y), 0, img.height - 1);
+    let i = 4 * (y * img.width + x);
+    return (img.pixels[i] + img.pixels[i + 1] + img.pixels[i + 2]) / 3;
+  }
+});
+
+/* MAGNETIC TOOL */
+let magSketch = new p5(p => {
+  let img;
+  let maxSize = 900;
+
+  p.setup = () => {
+    let c = p.createCanvas(900, 900);
+    c.parent("magCanvas");
+    p.pixelDensity(2);
+    p.noLoop();
+
+    magUpload.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      magPreview.src = url;
+      magPreview.style.display = "block";
+
+      p.loadImage(url, loaded => {
+        const scale = maxSize / Math.max(loaded.width, loaded.height);
+        p.resizeCanvas(Math.floor(loaded.width * scale), Math.floor(loaded.height * scale));
+        img = loaded;
+        img.resize(p.width, p.height);
+        p.redraw();
+      });
+    });
+
+    [
+      magThreshold, magDensity, magLength,
+      magNoise, magForce, magStrokeWeight,
+      magStrokeColor, magBgColor
+    ].forEach(el => el.addEventListener("input", () => p.redraw()));
+  };
+
+  p.draw = () => {
+    p.background(magBgColor.value);
+
+    if (!img) {
+      p.fill(magStrokeColor.value);
+      p.noStroke();
+      p.textAlign(p.CENTER, p.CENTER);
+      p.textSize(24);
+      p.text("Upload an image", p.width / 2, p.height / 2);
+      return;
+    }
+
+    img.loadPixels();
+
+    let threshold = Number(magThreshold.value);
+    let density = Number(magDensity.value);
+    let lineLength = Number(magLength.value);
+    let noiseAmount = Number(magNoise.value);
+    let force = Number(magForce.value);
+    let sw = Number(magStrokeWeight.value);
+
+    p.stroke(magStrokeColor.value);
+    p.strokeWeight(sw);
+    p.noFill();
+
+    let centers = findDarkCenters(threshold);
+
+    for (let y = 0; y < p.height; y += density) {
+      for (let x = 0; x < p.width; x += density) {
+        let b = brightnessAt(x, y);
+
+        if (b < threshold) {
+          let center = nearestCenter(x, y, centers);
+
+          let dx = x - center.x;
+          let dy = y - center.y;
+          let angle = p.atan2(dy, dx);
+
+          let n = p.noise(x * 0.01, y * 0.01);
+          angle += p.map(n, 0, 1, -p.PI, p.PI) * noiseAmount;
+
+          let darkness = p.map(b, 0, threshold, 1, 0);
+          let len = lineLength * darkness * p.random(0.4, 1.4);
+          let pull = force * darkness;
+
+          p.line(
+            x - p.cos(angle) * len * 0.2,
+            y - p.sin(angle) * len * 0.2,
+            x + p.cos(angle) * len * pull,
+            y + p.sin(angle) * len * pull
+          );
+        }
+      }
+    }
+
+    for (let i = 0; i < 9000; i++) {
+      let x = p.random(p.width);
+      let y = p.random(p.height);
+      let b = brightnessAt(x, y);
+
+      if (b < threshold + 40 && p.random() < 0.35) {
+        p.strokeWeight(p.random(0.4, sw));
+        p.point(x, y);
+      }
+    }
+  };
+
+  function brightnessAt(x, y) {
+    x = p.constrain(Math.floor(x), 0, img.width - 1);
+    y = p.constrain(Math.floor(y), 0, img.height - 1);
+    let i = 4 * (y * img.width + x);
+    return (img.pixels[i] + img.pixels[i + 1] + img.pixels[i + 2]) / 3;
+  }
+
+  function findDarkCenters(threshold) {
+    let centers = [];
+    let grid = 120;
+
+    for (let y = grid / 2; y < p.height; y += grid) {
+      for (let x = grid / 2; x < p.width; x += grid) {
+        let totalX = 0;
+        let totalY = 0;
+        let count = 0;
+
+        for (let yy = y - grid / 2; yy < y + grid / 2; yy += 8) {
+          for (let xx = x - grid / 2; xx < x + grid / 2; xx += 8) {
+            if (brightnessAt(xx, yy) < threshold) {
+              totalX += xx;
+              totalY += yy;
+              count++;
+            }
+          }
+        }
+
+        if (count > 10) {
+          centers.push({ x: totalX / count, y: totalY / count });
+        }
+      }
+    }
+
+    if (centers.length === 0) {
+      centers.push({ x: p.width / 2, y: p.height / 2 });
+    }
+
+    return centers;
+  }
+
+  function nearestCenter(x, y, centers) {
+    let closest = centers[0];
+    let minDist = Infinity;
+
+    for (let c of centers) {
+      let d = p.dist(x, y, c.x, c.y);
+      if (d < minDist) {
+        minDist = d;
+        closest = c;
+      }
+    }
+
+    return closest;
+  }
+});
+</script>
+
+</body>
+</html>
